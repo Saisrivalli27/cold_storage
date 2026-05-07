@@ -2,7 +2,24 @@ const mongoose = require('mongoose');
 
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI);
+    let uri = process.env.MONGODB_URI;
+
+    // If URI is Atlas (cloud), connect directly — skip memory server
+    if (uri && uri.startsWith('mongodb+srv://')) {
+      console.log('☁️  Connecting to MongoDB Atlas...');
+    } else {
+      // No Atlas URI — fall back to in-memory MongoDB for local dev
+      try {
+        const { MongoMemoryServer } = require('mongodb-memory-server');
+        const mongod = await MongoMemoryServer.create();
+        uri = mongod.getUri();
+        console.log('⚡ Using MongoDB Memory Server (no local MongoDB detected)');
+      } catch (memErr) {
+        // mongodb-memory-server not available, use URI from .env as-is
+      }
+    }
+
+    const conn = await mongoose.connect(uri);
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
 
     // Auto-seed defaults
