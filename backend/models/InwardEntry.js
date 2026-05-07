@@ -1,72 +1,83 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { getSequelize } = require('../config/db');
 
-const inwardEntrySchema = new mongoose.Schema({
-  farmerName: {
-    type: String,
-    required: [true, 'Farmer name is required'],
-    trim: true
-  },
-  phone: {
-    type: String,
-    required: [true, 'Phone number is required'],
-    trim: true
-  },
-  productType: {
-    type: String,
-    required: [true, 'Product type is required'],
-    trim: true
-  },
-  quantity: {
-    type: Number,
-    required: [true, 'Quantity is required'],
-    min: [0.1, 'Quantity must be positive']
-  },
-  pricePerUnit: {
-    type: Number,
-    required: [true, 'Price per unit is required'],
-    default: 2,
-    min: [0, 'Price must be positive']
-  },
-  remainingQty: {
-    type: Number,
-    default: 0
-  },
-  storageType: {
-    type: String,
-    enum: ['Cold', 'Frozen'],
-    required: [true, 'Storage type is required']
-  },
-  date: {
-    type: Date,
-    default: Date.now
-  },
-  expectedDuration: {
-    type: Number,
-    required: [true, 'Expected duration is required'],
-    min: [1, 'Duration must be at least 1 day']
-  },
-  imageUrl: {
-    type: String,
-    default: ''
-  },
-  status: {
-    type: String,
-    enum: ['active', 'completed'],
-    default: 'active'
-  },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  }
-}, { timestamps: true });
+let InwardEntryModel = null;
 
-// Set remainingQty to quantity on creation
-inwardEntrySchema.pre('save', function(next) {
-  if (this.isNew) {
-    this.remainingQty = this.quantity;
-  }
-  next();
-});
+const getInwardEntry = () => {
+  if (InwardEntryModel) return InwardEntryModel;
 
-module.exports = mongoose.model('InwardEntry', inwardEntrySchema);
+  const sequelize = getSequelize();
+  InwardEntryModel = sequelize.define('InwardEntry', {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true
+    },
+    farmerName: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      validate: { notEmpty: { msg: 'Farmer name is required' } }
+    },
+    phone: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      validate: { notEmpty: { msg: 'Phone number is required' } }
+    },
+    productType: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      validate: { notEmpty: { msg: 'Product type is required' } }
+    },
+    quantity: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+      validate: { min: { args: [0.1], msg: 'Quantity must be positive' } }
+    },
+    pricePerUnit: {
+      type: DataTypes.FLOAT,
+      defaultValue: 2,
+      validate: { min: { args: [0], msg: 'Price must be positive' } }
+    },
+    remainingQty: {
+      type: DataTypes.FLOAT,
+      defaultValue: 0
+    },
+    storageType: {
+      type: DataTypes.ENUM('Cold', 'Frozen'),
+      allowNull: false
+    },
+    date: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW
+    },
+    expectedDuration: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      validate: { min: { args: [1], msg: 'Duration must be at least 1 day' } }
+    },
+    imageUrl: {
+      type: DataTypes.STRING,
+      defaultValue: ''
+    },
+    status: {
+      type: DataTypes.ENUM('active', 'completed'),
+      defaultValue: 'active'
+    },
+    createdBy: {
+      type: DataTypes.INTEGER,
+      allowNull: false
+    }
+  }, {
+    tableName: 'inward_entries',
+    timestamps: true,
+    hooks: {
+      beforeCreate: (entry) => {
+        entry.remainingQty = entry.quantity;
+      }
+    }
+  });
+
+  return InwardEntryModel;
+};
+
+module.exports = getInwardEntry;

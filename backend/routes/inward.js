@@ -2,7 +2,7 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const multer = require('multer');
 const path = require('path');
-const InwardEntry = require('../models/InwardEntry');
+const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -19,7 +19,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = /jpeg|jpg|png|webp/;
     const extOk = allowed.test(path.extname(file.originalname).toLowerCase());
@@ -45,6 +45,7 @@ router.post('/', auth, upload.single('image'), [
       return res.status(400).json({ errors: errors.array() });
     }
 
+    const InwardEntry = require('../models/InwardEntry')();
     const entryData = {
       farmerName: req.body.farmerName,
       phone: req.body.phone,
@@ -54,14 +55,15 @@ router.post('/', auth, upload.single('image'), [
       storageType: req.body.storageType,
       date: req.body.date || new Date(),
       expectedDuration: parseInt(req.body.expectedDuration),
-      createdBy: req.user._id,
+      createdBy: req.user.id,
       imageUrl: req.file ? `/uploads/${req.file.filename}` : ''
     };
 
-    const entry = new InwardEntry(entryData);
-    await entry.save();
-
-    res.status(201).json(entry);
+    const entry = await InwardEntry.create(entryData);
+    // Return with _id alias for frontend compatibility
+    const result = entry.toJSON();
+    result._id = result.id;
+    res.status(201).json(result);
   } catch (error) {
     console.error('Inward create error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -71,21 +73,34 @@ router.post('/', auth, upload.single('image'), [
 // GET /api/inward - List all inward entries
 router.get('/', auth, async (req, res) => {
   try {
+    const InwardEntry = require('../models/InwardEntry')();
+    const User = require('../models/User')();
     const { product, status, startDate, endDate } = req.query;
-    const filter = {};
-    if (product) filter.productType = new RegExp(product, 'i');
-    if (status) filter.status = status;
+    const where = {};
+
+    if (product) where.productType = { [Op.iLike]: `%${product}%` };
+    if (status) where.status = status;
     if (startDate || endDate) {
-      filter.date = {};
-      if (startDate) filter.date.$gte = new Date(startDate);
-      if (endDate) filter.date.$lte = new Date(endDate);
+      where.date = {};
+      if (startDate) where.date[Op.gte] = new Date(startDate);
+      if (endDate) where.date[Op.lte] = new Date(endDate);
     }
 
-    const entries = await InwardEntry.find(filter)
-      .populate('createdBy', 'name')
-      .sort({ createdAt: -1 });
+    const entries = await InwardEntry.findAll({
+      where,
+      include: [{ model: User, as: 'creator', attributes: ['name'] }],
+      order: [['createdAt', 'DESC']]
+    });
 
-    res.json(entries);
+    // Map to match frontend expectations (add _id alias)
+    const result = entries.map(e => {
+      const obj = e.toJSON();
+      obj._id = obj.id;
+      obj.createdBy = obj.creator;
+      return obj;
+    });
+
+    res.json(result);
   } catch (error) {
     console.error('Inward list error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -95,9 +110,18 @@ router.get('/', auth, async (req, res) => {
 // GET /api/inward/:id
 router.get('/:id', auth, async (req, res) => {
   try {
-    const entry = await InwardEntry.findById(req.params.id).populate('createdBy', 'name');
+    const InwardEntry = require('../models/InwardEntry')();
+    const User = require('../models/User')();
+
+    const entry = await InwardEntry.findByPk(req.params.id, {
+      include: [{ model: User, as: 'creator', attributes: ['name'] }]
+    });
     if (!entry) return res.status(404).json({ message: 'Entry not found' });
-    res.json(entry);
+
+    const result = entry.toJSON();
+    result._id = result.id;
+    result.createdBy = result.creator;
+    res.json(result);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }

@@ -1,42 +1,72 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { getSequelize } = require('../config/db');
 const bcrypt = require('bcryptjs');
 
-const userSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, 'Name is required'],
-    trim: true
-  },
-  email: {
-    type: String,
-    required: [true, 'Email is required'],
-    unique: true,
-    lowercase: true,
-    trim: true
-  },
-  password: {
-    type: String,
-    required: [true, 'Password is required'],
-    minlength: 6
-  },
-  role: {
-    type: String,
-    enum: ['admin', 'staff'],
-    default: 'staff'
-  }
-}, { timestamps: true });
+// Lazy initialization to avoid circular dependency
+let UserModel = null;
 
-// Hash password before saving
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  const salt = await bcrypt.genSalt(12);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
-});
+const getUser = () => {
+  if (UserModel) return UserModel;
 
-// Compare password method
-userSchema.methods.comparePassword = async function(candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
+  const sequelize = getSequelize();
+  UserModel = sequelize.define('User', {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true
+    },
+    name: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      validate: { notEmpty: { msg: 'Name is required' } }
+    },
+    email: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+      validate: { isEmail: { msg: 'Valid email is required' } }
+    },
+    password: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      validate: { len: { args: [6], msg: 'Password must be at least 6 characters' } }
+    },
+    role: {
+      type: DataTypes.ENUM('admin', 'staff'),
+      defaultValue: 'staff'
+    }
+  }, {
+    tableName: 'users',
+    timestamps: true,
+    hooks: {
+      beforeCreate: async (user) => {
+        if (user.password) {
+          const salt = await bcrypt.genSalt(12);
+          user.password = await bcrypt.hash(user.password, salt);
+        }
+      },
+      beforeUpdate: async (user) => {
+        if (user.changed('password')) {
+          const salt = await bcrypt.genSalt(12);
+          user.password = await bcrypt.hash(user.password, salt);
+        }
+      }
+    }
+  });
+
+  // Instance method
+  UserModel.prototype.comparePassword = async function(candidatePassword) {
+    return bcrypt.compare(candidatePassword, this.password);
+  };
+
+  // Return user without password
+  UserModel.prototype.toSafeJSON = function() {
+    const values = { ...this.get() };
+    delete values.password;
+    return values;
+  };
+
+  return UserModel;
 };
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = getUser;

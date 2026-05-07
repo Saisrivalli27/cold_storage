@@ -1,20 +1,38 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { getSequelize } = require('../config/db');
 
-const settingsSchema = new mongoose.Schema({
-  totalCapacity: {
-    type: Number,
-    default: 100000, // 100,000 kg
-    min: [1, 'Capacity must be positive']
-  },
-  ratePerKgPerDay: {
-    type: Number,
-    default: 2, // ₹2 per kg per day
-    min: [0.01, 'Rate must be positive']
-  },
-  updatedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }
-}, { timestamps: true });
+let SettingsModel = null;
 
-module.exports = mongoose.model('Settings', settingsSchema);
+const getSettings = () => {
+  if (SettingsModel) return SettingsModel;
+
+  const sequelize = getSequelize();
+  SettingsModel = sequelize.define('Settings', {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true
+    },
+    totalCapacity: {
+      type: DataTypes.FLOAT,
+      defaultValue: 100000,
+      validate: { min: { args: [1], msg: 'Capacity must be positive' } }
+    },
+    ratePerKgPerDay: {
+      type: DataTypes.FLOAT,
+      defaultValue: 2,
+      validate: { min: { args: [0.01], msg: 'Rate must be positive' } }
+    },
+    updatedBy: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    }
+  }, {
+    tableName: 'settings',
+    timestamps: true
+  });
+
+  return SettingsModel;
+};
+
+module.exports = getSettings;

@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
 
-const connectDB = require('./config/db');
+const { connectDB } = require('./config/db');
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -17,7 +17,7 @@ const settingsRoutes = require('./routes/settings');
 
 const app = express();
 
-// Ensure uploads directory exists (local only — Vercel has no persistent disk)
+// Ensure uploads directory exists (local only)
 if (process.env.NODE_ENV !== 'production') {
   const uploadsDir = path.join(__dirname, 'uploads');
   if (!fs.existsSync(uploadsDir)) {
@@ -42,12 +42,12 @@ app.use('/api/settings', settingsRoutes);
 
 // Root route
 app.get('/', (req, res) => {
-  res.json({ message: '❄️ Cold Storage API is running!', status: 'ok' });
+  res.json({ message: '❄️ Cold Storage API is running! (PostgreSQL)', status: 'ok' });
 });
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+  res.json({ status: 'ok', db: 'PostgreSQL', time: new Date().toISOString() });
 });
 
 // Error handler

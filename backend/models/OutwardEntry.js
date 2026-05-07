@@ -1,25 +1,41 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { getSequelize } = require('../config/db');
 
-const outwardEntrySchema = new mongoose.Schema({
-  inwardEntry: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'InwardEntry',
-    required: true
-  },
-  quantityRemoved: {
-    type: Number,
-    required: [true, 'Quantity removed is required'],
-    min: [0.1, 'Quantity must be positive']
-  },
-  date: {
-    type: Date,
-    default: Date.now
-  },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  }
-}, { timestamps: true });
+let OutwardEntryModel = null;
 
-module.exports = mongoose.model('OutwardEntry', outwardEntrySchema);
+const getOutwardEntry = () => {
+  if (OutwardEntryModel) return OutwardEntryModel;
+
+  const sequelize = getSequelize();
+  OutwardEntryModel = sequelize.define('OutwardEntry', {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true
+    },
+    inwardEntryId: {
+      type: DataTypes.INTEGER,
+      allowNull: false
+    },
+    quantityRemoved: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+      validate: { min: { args: [0.1], msg: 'Quantity must be positive' } }
+    },
+    date: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW
+    },
+    createdBy: {
+      type: DataTypes.INTEGER,
+      allowNull: false
+    }
+  }, {
+    tableName: 'outward_entries',
+    timestamps: true
+  });
+
+  return OutwardEntryModel;
+};
+
+module.exports = getOutwardEntry;

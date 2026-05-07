@@ -1,7 +1,5 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const OutwardEntry = require('../models/OutwardEntry');
-const InwardEntry = require('../models/InwardEntry');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -17,11 +15,14 @@ router.post('/', auth, [
       return res.status(400).json({ errors: errors.array() });
     }
 
+    const InwardEntry = require('../models/InwardEntry')();
+    const OutwardEntry = require('../models/OutwardEntry')();
+
     const { inwardEntry: inwardId, quantityRemoved } = req.body;
     const qty = parseFloat(quantityRemoved);
 
     // Find the inward entry
-    const inwardEntry = await InwardEntry.findById(inwardId);
+    const inwardEntry = await InwardEntry.findByPk(inwardId);
     if (!inwardEntry) {
       return res.status(404).json({ message: 'Inward entry not found' });
     }
@@ -34,28 +35,32 @@ router.post('/', auth, [
     }
 
     // Create outward entry
-    const outward = new OutwardEntry({
-      inwardEntry: inwardId,
+    const outward = await OutwardEntry.create({
+      inwardEntryId: inwardId,
       quantityRemoved: qty,
       date: req.body.date || new Date(),
-      createdBy: req.user._id
+      createdBy: req.user.id
     });
-    await outward.save();
 
     // Update remaining quantity
-    inwardEntry.remainingQty -= qty;
-    if (inwardEntry.remainingQty <= 0) {
-      inwardEntry.remainingQty = 0;
-      inwardEntry.status = 'completed';
+    let newRemaining = inwardEntry.remainingQty - qty;
+    let newStatus = inwardEntry.status;
+    if (newRemaining <= 0) {
+      newRemaining = 0;
+      newStatus = 'completed';
     }
-    await inwardEntry.save();
+
+    await inwardEntry.update({ remainingQty: newRemaining, status: newStatus });
+
+    const outwardResult = outward.toJSON();
+    outwardResult._id = outwardResult.id;
 
     res.status(201).json({
-      outward,
+      outward: outwardResult,
       updatedInward: {
-        _id: inwardEntry._id,
-        remainingQty: inwardEntry.remainingQty,
-        status: inwardEntry.status
+        _id: inwardEntry.id,
+        remainingQty: newRemaining,
+        status: newStatus
       }
     });
   } catch (error) {
@@ -67,15 +72,31 @@ router.post('/', auth, [
 // GET /api/outward - List all outward entries
 router.get('/', auth, async (req, res) => {
   try {
-    const entries = await OutwardEntry.find()
-      .populate({
-        path: 'inwardEntry',
-        select: 'farmerName productType quantity storageType'
-      })
-      .populate('createdBy', 'name')
-      .sort({ createdAt: -1 });
+    const InwardEntry = require('../models/InwardEntry')();
+    const OutwardEntry = require('../models/OutwardEntry')();
+    const User = require('../models/User')();
 
-    res.json(entries);
+    const entries = await OutwardEntry.findAll({
+      include: [
+        {
+          model: InwardEntry,
+          as: 'inwardEntry',
+          attributes: ['farmerName', 'productType', 'quantity', 'storageType']
+        },
+        { model: User, as: 'creator', attributes: ['name'] }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const result = entries.map(e => {
+      const obj = e.toJSON();
+      obj._id = obj.id;
+      if (obj.inwardEntry) obj.inwardEntry._id = obj.inwardEntry.id;
+      obj.createdBy = obj.creator;
+      return obj;
+    });
+
+    res.json(result);
   } catch (error) {
     console.error('Outward list error:', error);
     res.status(500).json({ message: 'Server error' });
