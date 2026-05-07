@@ -40,6 +40,11 @@ app.use('/api/billing', billingRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/settings', settingsRoutes);
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({ message: '❄️ Cold Storage API is running!', status: 'ok' });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
