@@ -1,32 +1,29 @@
 const mongoose = require('mongoose');
 
-const connectDB = async () => {
-  try {
-    let uri = process.env.MONGODB_URI;
+let isConnected = false;
 
-    // If URI is Atlas (cloud), connect directly — skip memory server
-    if (uri && uri.startsWith('mongodb+srv://')) {
-      console.log('☁️  Connecting to MongoDB Atlas...');
-    } else {
-      // No Atlas URI — fall back to in-memory MongoDB for local dev
-      try {
-        const { MongoMemoryServer } = require('mongodb-memory-server');
-        const mongod = await MongoMemoryServer.create();
-        uri = mongod.getUri();
-        console.log('⚡ Using MongoDB Memory Server (no local MongoDB detected)');
-      } catch (memErr) {
-        // mongodb-memory-server not available, use URI from .env as-is
-      }
+const connectDB = async () => {
+  if (isConnected) return; // Reuse connection in serverless
+
+  try {
+    const uri = process.env.MONGODB_URI;
+
+    if (!uri) {
+      throw new Error('MONGODB_URI is not defined in environment variables');
     }
 
-    const conn = await mongoose.connect(uri);
-    console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
+    await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 10000,
+    });
+
+    isConnected = true;
+    console.log(`✅ MongoDB Connected: ${mongoose.connection.host}`);
 
     // Auto-seed defaults
     await seedDefaults();
   } catch (error) {
     console.error(`❌ MongoDB Error: ${error.message}`);
-    process.exit(1);
+    throw error;
   }
 };
 
